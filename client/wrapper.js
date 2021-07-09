@@ -1,111 +1,90 @@
-class SharedWorkerSocketIO {
+class WebsocketWorker {
+  WorkerType = window.SharedWorker || window.Worker;
+  events = new EventTarget();
+  worker = null;
+  socket = null;
 
-    WorkerType = global.SharedWorker || global.Worker
-    worker = null
-    workerUri = null
-    socketUri = null
-    events = new EventEmitter()
-    socket = null
+  start() {
+    return this.startWorker().catch((e) => {
+      console.log(e);
+      this.startSocketIo();
+    });
+  }
 
-    constructor(socketUri) {
-        this.log('SharedWorkerSocketIO ', socketUri)
-        this.socketUri = socketUri
+  startWorker() {
+    return fetch("worker.js", {
+      mode: "no-cors",
+    })
+      .then((response) => response.blob())
+      .then((script) => {
+        const workerUri = URL.createObjectURL(script);
+
+        this.worker = new this.WorkerType("worker.js", {
+          name: "socketIOWorker",
+        });
+        const port = this.worker.port || this.worker;
+
+        port.onmessage = (event) => {
+          this.log(
+            "<< worker received message:",
+            event.data.type,
+            event.data.message
+          );
+          this.events.dispatchEvent(
+            new CustomEvent(event.data.type, { detail: JSON.parse(event.data.message) })
+          );
+        };
+
+        port.onerror = (event) => {
+          this.log("<< worker error:", error);
+          this.events.dispatchEvent("error", event);
+        };
+
+        this.log(">> worker started");
+      });
+  }
+
+  startSocketIo() {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.onload = () => {
+        this.socket = io("localhost:3000");
+
+        resolve();
+      };
+      script.src = "https://cdn.socket.io/4.1.2/socket.io.min.js";
+      document.head.appendChild(script);
+    });
+  }
+
+  emit(event, data, cb) {
+    this.log(">> emit:", event, data, cb);
+    if (this.worker) {
+      const port = this.worker.port || this.worker;
+      port.postMessage({
+        eventType: "emit",
+        event: event,
+        data: data,
+      });
+    } else {
+      this.socket.emit(...arguments);
     }
+  }
 
-    startSocketIo() {
-        this.socket = io(this.socketUri)
+  on(event, cb) {
+    if (this.worker) {
+      this.log("worker add handler on event:", event);
+      const port = this.worker.port || this.worker;
+      port.postMessage({
+        eventType: "on",
+        event: event,
+      });
+      this.events.addEventListener(event, cb);
+    } else {
+      this.log("socket add handler on event:", event);
+      this.socket.on(...arguments);
     }
-
-    startWorker() {
-        const workerUri = this.getWorkerUri()
-        this.log('Starting Worker', this.WorkerType, workerUri)
-        this.worker = new this.WorkerType(workerUri, {
-            name: this.socketUri
-        })
-        const port = this.worker.port || this.worker
-        port.onmessage = event => {
-            this.log('<< worker received message:', event.data.type, event.data.message)
-            this.events.emit(event.data.type, event.data.message)
-        }
-        this.worker.onerror = event => {
-            this.log('worker error', event)
-            this.events.emit('error', event)
-        }
-        this.log('worker started')
-    }
-
-    emit(event, data, cb) {
-        this.log('>> emit:', event, data, cb)
-        if (this.worker) {
-            // todo: ack cb
-            const port = this.worker.port || this.worker
-            port.postMessage({
-                eventType: 'emit',
-                event: event,
-                data: data
-            })
-        } else {
-            this.socket.emit(...arguments)
-        }
-    }
-
-    on(event, cb) {
-        if (this.worker) {
-            this.log('worker add handler on event:', event)
-            const port = this.worker.port || this.worker
-            port.postMessage({
-                eventType: 'on',
-                event: event
-            })
-            this.events.on(event, cb)
-        } else {
-            this.log('socket add handler on event:', event)
-            this.socket.on(...arguments)
-        }
-    }
-
-    start() {
-        this.started = true
-        try {
-            this.log('Attempting to start socket.io shared webworker')
-            this.startWorker()
-        } catch (e) {
-            this.log('Error starting socket.io shared webwoker', e)
-            this.log('Starting socket.io instead')
-            this.worker = null // disable worker
-            this.startSocketIo()
-        }
-    }
-
-    setWorkerType(WorkerType) {
-        this.log('Setting WorkerType', WorkerType)
-        this.WorkerType = WorkerType
-    }
-
-    getWorkerObjectUrl() {
-        const script = '(' + global.SocketIoSharedWorker.toString() + ')()'
-        return global.URL.createObjectURL(new Blob([script], {type: 'application/javascript'}))
-    }
-
-    getWorkerUri() {
-        return this.workerUri || this.getWorkerObjectUrl()
-    }
-
-    useWorker(uri) {
-        this.log('Starting worker', uri)
-        this.workerUri = uri
-        if (!this.started) {
-            this.start()
-        }
-    }
-
-    /**
-     * @deprecated
-     */
-    setWorker = this.useWorker
-
+  }
 }
 
-SharedWorkerSocketIO.prototype.log = console.log.bind(console)
-
-module.exports = global.wio = uri => new SharedWorkerSocketIO(uri)
+WebsocketWorker.prototype.log = console.log.bind(console);

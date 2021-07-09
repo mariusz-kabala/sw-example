@@ -1,2 +1,25 @@
-<script src="https://cdn.socket.io/4.1.2/socket.io.min.js"></script>
+<script src="wrapper.js"></script>
 <script src="app.js"></script>
+
+<div class="info">
+    <div class="line">
+        <span>Connected clients:</span>
+        <span id="connectedClients">0</span>
+    </div>
+    <div class="line">
+        <span>Current socket TIME:</span>
+        <span id="serverTime"></span>
+    </div>
+</div>
+
+<style>
+    .info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .line {
+        display: flex;
+        flex-direction: row;
+    }
+</style>

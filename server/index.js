@@ -2,7 +2,12 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const server = http.createServer();
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+      }
+});
 
 let connectedSockets = 0;
 
@@ -17,7 +22,8 @@ io.on('connection', (socket) => {
 });
 
 setInterval(function() {
-    io.emit("message", "Hola " + new Date().getTime());
+    io.emit("message", JSON.stringify({type: 'time', 'value': new Date().getTime()}));
+    io.emit("message", JSON.stringify({type: 'connections', 'value': connectedSockets}));
 }, 1000); 
 
 server.listen(3000, () => {
